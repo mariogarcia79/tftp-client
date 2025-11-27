@@ -223,6 +223,7 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
 
         if (msg_len - 4 < BLOCK_SIZE) {
             fprintf(stdout, "El bloque %u es el ultimo.\n", block_num);
+            fprintf(stdout, "Cierre del fichero y del socket udp.\n");
             break;
         }
         block_num++;
@@ -230,7 +231,6 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
 
     fclose(file);
     close(sockfd);
-    fprintf(stdout, "Cierre del fichero y del socket udp.\n");
 
     return 0;
 }
@@ -372,6 +372,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         // If the block was smaller than 512 bytes, it means it's the last block
         if (bytes_read < BLOCK_SIZE) {
             fprintf(stdout, "El bloque %u es el ultimo.", block_num);
+            printf("Cierre del fichero y del socket udp.\n");
             break;
         }
 
@@ -381,8 +382,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
     // Finalize and close the file and socket
     fclose(file);
     close(sockfd);
-    printf("Cierre del fichero y del socket udp.\n");
-
+    
     return 0;
 }
 
