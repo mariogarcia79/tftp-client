@@ -185,8 +185,6 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         opcode = ntohs(opcode);
         received_block_num = ntohs(received_block_num);
 
-        printf("Recibido bloque del servidor (numero de bloque %u)\n", received_block_num);
-
         if (opcode == ERROR) {
             // Reuse block number variable, actually reading errcode
             fprintf(stdout, "Error %02u: %s\n", received_block_num, buffer + 4);
@@ -197,6 +195,8 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
             fprintf(stderr, "El codigo de operacion recibido es erroneo: %d\n", opcode);
             break;
         }
+
+        printf("Recibido bloque del servidor (numero de bloque %u)\n", received_block_num);
 
         if (received_block_num != block_num) {
             fprintf(stderr, "El numero de bloque no coincide: %d\n", received_block_num);
@@ -295,6 +295,8 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
             fclose(file);
             return -1;
         }
+
+        fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)", received_block_num);
 
         if (received_block_num == 0) {
             break; // Received ACK for block 0, ready to send data
