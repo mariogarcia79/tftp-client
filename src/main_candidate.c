@@ -361,7 +361,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
                 return -1;
             }
 
-            fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)", block_num);
+            //fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)", block_num);
 
             if (received_block_num == block_num) {
                 break; // Received ACK for the current block, proceed to the next one
