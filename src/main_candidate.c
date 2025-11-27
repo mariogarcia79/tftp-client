@@ -221,10 +221,12 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         }
         printf("Enviado ACK del bloque %u.\n", block_num);
 
-        if (msg_len - 4 < BLOCK_SIZE) break;
+        if (msg_len - 4 < BLOCK_SIZE) {
+            fprintf(stdout, "El bloque %u es el ultimo.\n", block_num);
+            break;
+        }
         block_num++;
     }
-    fprintf(stdout, "El bloque %u es el ultimo.\n", block_num);
 
     fclose(file);
     close(sockfd);
@@ -262,7 +264,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         return -1;
     }
     free(msg);
-    printf("Solicitud de escritura de \"%s\" enviada al servidor TFTP.\n", filename);
+    printf("Solicitud de escritura de \"%s\" enviada al servidor tftp.\n", filename);
 
     // Wait for the first ACK
     while (1) {
@@ -289,7 +291,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         }
 
         if (opcode != ACK) {
-            fprintf(stderr, "Código de operación recibido incorrecto: %d\n", opcode);
+            fprintf(stderr, "Codigo de operacion recibido incorrecto: %d\n", opcode);
             fclose(file);
             return -1;
         }
@@ -326,7 +328,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
             return -1;
         }
 
-        printf("Enviado bloque %u de datos.\n", block_num);
+        printf("Enviado bloque %u del fichero.\n", block_num);
 
         // Wait for ACK for the current block
         while (1) {
@@ -352,15 +354,17 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
             }
 
             if (opcode != ACK) {
-                fprintf(stderr, "Código de operación recibido incorrecto: %d\n", opcode);
+                fprintf(stderr, "Codigo de operación recibido incorrecto: %d\n", opcode);
                 fclose(file);
                 return -1;
             }
 
+            fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)", block_num);
+
             if (received_block_num == block_num) {
                 break; // Received ACK for the current block, proceed to the next one
             } else {
-                fprintf(stderr, "Número de bloque recibido incorrecto. Esperaba %u, pero recibí %u.\n",
+                fprintf(stderr, "Numero de bloque recibido incorrecto.\n",
                         block_num, received_block_num);
                 continue;
             }
@@ -368,6 +372,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
 
         // If the block was smaller than 512 bytes, it means it's the last block
         if (bytes_read < BLOCK_SIZE) {
+            fprintf("El bloque %u es el ultimo.", block_num);
             break;
         }
 
@@ -377,7 +382,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
     // Finalize and close the file and socket
     fclose(file);
     close(sockfd);
-    printf("El archivo se ha enviado correctamente.\n");
+    printf("Cierre del fichero y del socket udp.\n");
 
     return 0;
 }
