@@ -174,8 +174,6 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
         uint16_t opcode = (uint16_t)(buffer[0] << 8 | buffer[1]);
         uint16_t received_block_num = (uint16_t)(buffer[2] << 8 | buffer[3]);
 
-        received_block_num = ntohs(received_block_num);
-
         printf("Recibido bloque del servidor (numero de bloque %u)\n", received_block_num);
 
 
