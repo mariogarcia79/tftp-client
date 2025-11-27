@@ -208,6 +208,8 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
     fclose(file);
     close(sockfd);
     fprintf(stdout, "Cierre del fichero y del socket udp.");
+
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -229,7 +231,9 @@ int main(int argc, char *argv[]) {
 
     switch (args.operation) {
     case FLAG_READ:
-        receive_file(sockfd, &addr, args.filename);
+        err = receive_file(sockfd, &addr, args.filename);
+        if (err == -1)
+            exit(EXIT_FAILURE);
         break;
 
     default:
