@@ -364,15 +364,14 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
             if (received_block_num == block_num) {
                 break; // Received ACK for the current block, proceed to the next one
             } else {
-                fprintf(stderr, "Numero de bloque recibido incorrecto.\n",
-                        block_num, received_block_num);
+                fprintf(stderr, "Numero de bloque recibido incorrecto.\n");
                 continue;
             }
         }
 
         // If the block was smaller than 512 bytes, it means it's the last block
         if (bytes_read < BLOCK_SIZE) {
-            fprintf("El bloque %u es el ultimo.", block_num);
+            fprintf(stdout, "El bloque %u es el ultimo.", block_num);
             break;
         }
 
