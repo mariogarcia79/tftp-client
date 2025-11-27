@@ -172,8 +172,8 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
             break;
         }
 
-        memcpy(&opcode, buffer[0], 2);
-        memcpy(&received_block_num, buffer[2], 2);
+        memcpy(&opcode,             buffer + 0, 2);
+        memcpy(&received_block_num, buffer + 2, 2);
 
         printf("Recibido bloque del servidor (numero de bloque %u)\n", received_block_num);
 
@@ -192,7 +192,7 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
 
         // Remove the first 4B of the packet, its the header.
         // Use bytes units of data, account for content size (packet - 4B).
-        fwrite(buffer[4], 1, msg_len - 4, file);
+        fwrite(buffer + 4, 1, msg_len - 4, file);
 
         char ack_msg[4] = {0};
         ack_msg[0] = (char)(ACK >> 8);
