@@ -143,9 +143,11 @@ int
 receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
     char *msg;
     char buffer[BLOCK_SIZE + 4]; // Maximum size of received packet
-    socklen_t addr_len  = sizeof(*addr);
-    uint16_t  block_num = 1; // Block number for comparison of order
     ssize_t   msg_len;
+    socklen_t addr_len  = sizeof(*addr);
+    uint16_t  opcode;
+    uint16_t  block_num = 1; // Block number for comparison of order
+    uint16_t  received_block_num;
     
     FILE *file = fopen(filename, "w");
     if (file == NULL) {
@@ -170,9 +172,8 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
             break;
         }
 
-        // TODO: do parsing differently maybe, shammt is weird
-        uint16_t opcode = (uint16_t)(buffer[0] << 8 | buffer[1]);
-        uint16_t received_block_num = (uint16_t)(buffer[2] << 8 | buffer[3]);
+        opcode = &buffer[0];
+        received_block_num = &buffer[2];
 
         printf("Recibido bloque del servidor (numero de bloque %u)\n", received_block_num);
 
@@ -191,7 +192,7 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
 
         // Remove the first 4B of the packet, its the header.
         // Use bytes units of data, account for content size (packet - 4B).
-        fwrite(buffer + 4, 1, msg_len - 4, file);
+        fwrite(buffer[4], 1, msg_len - 4, file);
 
         char ack_msg[4] = {0};
         ack_msg[0] = (char)(ACK >> 8);
