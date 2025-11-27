@@ -1,3 +1,11 @@
+/**
+* Practica Tema 7: Cliente TFTP
+*
+* Garcia Carbonero, Mario
+* Adan de la Fuente, Hugo
+*
+*/
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,13 +42,16 @@ typedef enum {
     FLAG_WRITE
 } FlagType;
 
-FlagType get_flag(const char *arg) {
+FlagType
+get_flag(const char *arg) {
     if (!strcmp(arg, "-r")) return FLAG_READ;
     if (!strcmp(arg, "-w")) return FLAG_WRITE;
     return FLAG_UNKNOWN;
 }
 
-int parse_args(int argc, char *argv[], struct arguments *args) {
+int
+parse_args(int argc, char *argv[], struct arguments *args)
+{
     if (argc != 4) {
         errno = EINVAL;
         return -1;
@@ -62,7 +73,12 @@ int parse_args(int argc, char *argv[], struct arguments *args) {
     return 0;
 }
 
-int setup_socket(struct arguments *args, struct sockaddr_in *myaddr, struct sockaddr_in *addr) {
+int
+setup_socket(
+    struct arguments *args,
+    struct sockaddr_in *myaddr,
+    struct sockaddr_in *addr
+) {
     struct servent *serv;
     int sockfd;
 
@@ -98,15 +114,22 @@ int setup_socket(struct arguments *args, struct sockaddr_in *myaddr, struct sock
     return sockfd;
 }
 
-char *serialize_req(uint16_t opcode, char *filename, char *mode) {
+char
+*serialize_req(uint16_t opcode, char *filename, char *mode)
+{
+    uint16_t network_opcode;
     char *msg_start = NULL;
-    char *msg = (char *)malloc(sizeof(opcode) + strlen(filename) + strlen(mode) + 2);
+    char *msg = (char *)malloc(
+        sizeof(opcode)   +
+        strlen(filename) +
+        strlen(mode)   + 2 // Account for EOS
+    );
 
-    msg_start = msg;
+    msg_start = msg; // save initial pointer
 
     if (!msg) return NULL;
 
-    uint16_t network_opcode = htons(opcode);  // Convert to network byte order
+    network_opcode = htons(opcode);  // Convert to network byte order
     memcpy(msg, &network_opcode, sizeof(network_opcode));
     msg += sizeof(network_opcode);
     memcpy(msg, filename, strlen(filename) + 1);
@@ -116,52 +139,59 @@ char *serialize_req(uint16_t opcode, char *filename, char *mode) {
     return msg_start;
 }
 
-void receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
+int
+receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
     char *msg;
-    uint16_t block_num = 1;
-    char buffer[BLOCK_SIZE + 4];
-    ssize_t len;
-    socklen_t addr_len = sizeof(*addr);
+    char buffer[BLOCK_SIZE + 4]; // Maximum size of received packet
+    socklen_t addr_len  = sizeof(*addr);
+    uint16_t  block_num = 1; // Block number for comparison of order
+    ssize_t   msg_len;
+    
+    FILE *file = fopen(filename, "w");
+    if (file == NULL) {
+        perror("fopen");
+        return -1;
+    }
 
     msg = serialize_req(RRQ, (char *)filename, TFTP_MESSAGE_MODE);
-    sendto(sockfd, msg, strlen(filename) + strlen(TFTP_MESSAGE_MODE) + 4, 0, (struct sockaddr *)addr, sizeof(*addr));
+    if (sendto(sockfd, msg, strlen(filename) + strlen(TFTP_MESSAGE_MODE) + 4, 0, 
+            (struct sockaddr *)addr, sizeof(*addr)) == -1) {
+        perror("sendto");
+        return -1;
+    }
     free(msg);
-
-    // DEBUG
-    printf("REQUEST SENT\n");
+    printf("Solicitud de lectura de \"%s\" enviada al servidor tftp.\n", filename);
 
     while (1) {
-        len = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)addr, &addr_len);
-        if (len == -1) {
+        msg_len = recvfrom(sockfd, buffer, sizeof(buffer), 0,
+                (struct sockaddr *)addr, &addr_len);
+        if (msg_len == -1) {
             perror("recvfrom");
             break;
         }
 
-        // DEBUG
-        printf("RECEIVED BLOCK\n");
-        printf("%s", buffer);
-
+        // TODO: do parsing differently maybe, shammt is weird
         uint16_t opcode = (buffer[0] << 8) | buffer[1];
         uint16_t received_block_num = (buffer[2] << 8) | buffer[3];
-        
+
+        printf("Recibido bloque del servidor (numero de bloque %u)\n", received_block_num);
+
+
+        // TODO: check for errors also. Use a switch.
         if (opcode != DATA) {
-            fprintf(stderr, "Received unexpected opcode: %d\n", opcode);
+            fprintf(stderr, "El codigo de operacion recibido es erroneo: %d\n", opcode);
             break;
         }
 
+        // TODO: check for large files (weird block number error)
         if (received_block_num != block_num) {
-            fprintf(stderr, "Received unexpected block number: %d\n", received_block_num);
+            fprintf(stderr, "El numero de bloque no coincide: %d\n", received_block_num);
             continue;
         }
 
-        FILE *file = fopen(filename, "ab");
-        if (file == NULL) {
-            perror("fopen");
-            break;
-        }
-
-        fwrite(buffer + 4, 1, len - 4, file);
-        fclose(file);
+        // Remove the first 4B of the packet, its the header.
+        // Use bytes units of data, account for content size (packet - 4B).
+        fwrite(buffer + 4, 1, msg_len - 4, file);
 
         char ack_msg[4] = {0};
         ack_msg[0] = (char)(ACK >> 8);
@@ -169,17 +199,15 @@ void receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
         ack_msg[2] = (char)(block_num >> 8);
         ack_msg[3] = (char)(block_num & 0xFF);
         sendto(sockfd, ack_msg, 4, 0, (struct sockaddr *)addr, sizeof(*addr));
-        // DEBUG
-        printf("SENT ACK\n");
+        printf("Enviado ACK del bloque %u\n", block_num);
 
-        if (len - 4 < BLOCK_SIZE) {
-            break;
-        }
-
+        if (msg_len - 4 < BLOCK_SIZE) break;
         block_num++;
     }
 
-    printf("File received and saved successfully.\n");
+    fclose(file);
+    close(sockfd);
+    fprintf(stdout, "Cierre del fichero y del socket udp.");
 }
 
 int main(int argc, char *argv[]) {
@@ -198,9 +226,6 @@ int main(int argc, char *argv[]) {
     sockfd = setup_socket(&args, &myaddr, &addr);
     if (sockfd == -1)
         exit(EXIT_FAILURE);
-    
-    // DEBUG
-    printf("SOCKET CREATED\n");
 
     switch (args.operation) {
     case FLAG_READ:
