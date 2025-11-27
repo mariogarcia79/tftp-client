@@ -253,7 +253,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         return -1;
     }
 
-    // Send WRQ (Write Request) to the server
+    // Send WRQ to the server
     msg = serialize_req(WRQ, (char *)filename, TFTP_MESSAGE_MODE);
     if (sendto(sockfd, msg, strlen(filename) + strlen(TFTP_MESSAGE_MODE) + 4, 0, 
                (struct sockaddr *)addr, sizeof(*addr)) == -1) {
@@ -283,7 +283,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         opcode = ntohs(opcode);
         received_block_num = ntohs(received_block_num);
 
-        // Ensure we received the correct ACK for block 0
+        // Ensure the received the correct ACK for block 0
         if (opcode == ERROR) {
             fprintf(stdout, "Error %02u: %s\n", received_block_num, buffer + 4);
             fclose(file);
@@ -296,10 +296,10 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
             return -1;
         }
 
-        fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)", received_block_num);
+        fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)\n", received_block_num);
 
         if (received_block_num == 0) {
-            break; // Received ACK for block 0, ready to send data
+            break;
         }
     }
 
@@ -361,7 +361,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
                 return -1;
             }
 
-            //fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)", block_num);
+            fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)\n", received_block_num);
 
             if (received_block_num == block_num) {
                 break; // Received ACK for the current block, proceed to the next one
@@ -371,17 +371,15 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
             }
         }
 
-        // If the block was smaller than 512 bytes, it means it's the last block
         if (bytes_read < BLOCK_SIZE) {
-            fprintf(stdout, "El bloque %u es el ultimo.", block_num);
+            fprintf(stdout, "El bloque %u es el ultimo.\n", block_num);
             printf("Cierre del fichero y del socket udp.\n");
             break;
         }
 
-        block_num++; // Increment the block number for the next data packet
+        block_num++;
     }
 
-    // Finalize and close the file and socket
     fclose(file);
     close(sockfd);
     
