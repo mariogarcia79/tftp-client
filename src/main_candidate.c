@@ -174,6 +174,8 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
         uint16_t opcode = (buffer[0] << 8) | buffer[1];
         uint16_t received_block_num = (buffer[2] << 8) | buffer[3];
 
+        received_block_num = ntohs(received_block_num);
+
         printf("Recibido bloque del servidor (numero de bloque %u)\n", received_block_num);
 
 
@@ -183,7 +185,7 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
             break;
         }
 
-        // TODO: check for large files (weird block number error)
+        // TODO: check for large files (weird block number error) 126 > 65408
         if (received_block_num != block_num) {
             fprintf(stderr, "El numero de bloque no coincide: %d\n", received_block_num);
             continue;
@@ -199,15 +201,16 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
         ack_msg[2] = (char)(block_num >> 8);
         ack_msg[3] = (char)(block_num & 0xFF);
         sendto(sockfd, ack_msg, 4, 0, (struct sockaddr *)addr, sizeof(*addr));
-        printf("Enviado ACK del bloque %u\n", block_num);
+        printf("Enviado ACK del bloque %u.\n", block_num);
 
         if (msg_len - 4 < BLOCK_SIZE) break;
         block_num++;
     }
+    fprintf(stdout, "El bloque %u es el ultimo.\n", block_num);
 
     fclose(file);
     close(sockfd);
-    fprintf(stdout, "Cierre del fichero y del socket udp.");
+    fprintf(stdout, "Cierre del fichero y del socket udp.\n");
 
     return 0;
 }
