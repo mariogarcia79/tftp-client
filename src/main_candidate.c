@@ -142,6 +142,7 @@ char
 int
 receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
     char *msg;
+    char ack_msg[4];
     char buffer[BLOCK_SIZE + 4]; // Maximum size of received packet
     ssize_t   msg_len;
     socklen_t addr_len  = sizeof(*addr);
@@ -172,21 +173,25 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
             break;
         }
 
-        memcpy(&opcode,             buffer + 0, 2);
-        memcpy(&received_block_num, buffer + 2, 2);
+        memcpy(&opcode,             buffer + 0, 2); // Get opcode
+        memcpy(&received_block_num, buffer + 2, 2); // Get block number
+        
+        // COnvert to host byte order
         opcode = ntohs(opcode);
         received_block_num = ntohs(received_block_num);
 
         printf("Recibido bloque del servidor (numero de bloque %u)\n", received_block_num);
 
-
-        // TODO: check for errors also. Use a switch.
+        if (opcode == ERROR) {
+            // Reuse block number variable, actually reading errcode
+            fprintf(stdout, "Error %2u: %s", received_block_num, buffer + 4);
+        } 
+        
         if (opcode != DATA) {
             fprintf(stderr, "El codigo de operacion recibido es erroneo: %d\n", opcode);
             break;
         }
 
-        // TODO: check for large files (weird block number error) 126 > 65408
         if (received_block_num != block_num) {
             fprintf(stderr, "El numero de bloque no coincide: %d\n", received_block_num);
             continue;
@@ -196,11 +201,18 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
         // Use bytes units of data, account for content size (packet - 4B).
         fwrite(buffer + 4, 1, msg_len - 4, file);
 
+
+        /*
         char ack_msg[4] = {0};
         ack_msg[0] = (char)(ACK >> 8);
         ack_msg[1] = (char)(ACK & 0xFF);
         ack_msg[2] = (char)(block_num >> 8);
         ack_msg[3] = (char)(block_num & 0xFF);
+        */
+    
+        memcpy(ack_msg + 0, ACK,        2); // Set opcode
+        memcpy(ack_msg + 2, block_num,  2); // Set block number
+        
         sendto(sockfd, ack_msg, 4, 0, (struct sockaddr *)addr, sizeof(*addr));
         printf("Enviado ACK del bloque %u.\n", block_num);
 
