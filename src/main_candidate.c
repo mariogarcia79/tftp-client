@@ -106,8 +106,9 @@ char *serialize_req(uint16_t opcode, char *filename, char *mode) {
 
     if (!msg) return NULL;
 
-    memcpy(msg, &opcode, sizeof(opcode));
-    msg += sizeof(opcode);
+    uint16_t network_opcode = htons(opcode);  // Convert to network byte order
+    memcpy(msg, &network_opcode, sizeof(network_opcode));
+    msg += sizeof(network_opcode);
     memcpy(msg, filename, strlen(filename) + 1);
     msg += strlen(filename) + 1;
     memcpy(msg, mode, strlen(mode) + 1);
@@ -127,7 +128,7 @@ void receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
     free(msg);
 
     // DEBUG
-    printf("REQUEST SENT\n");
+    printf("REQUEST SENT TEST\n");
 
     while (1) {
         len = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)addr, &addr_len);
