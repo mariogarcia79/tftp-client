@@ -126,12 +126,18 @@ void receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
     sendto(sockfd, msg, strlen(filename) + strlen(TFTP_MESSAGE_MODE) + 4, 0, (struct sockaddr *)addr, sizeof(*addr));
     free(msg);
 
+    // DEBUG
+    printf("REQUEST SENT\n");
+
     while (1) {
         len = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)addr, &addr_len);
         if (len == -1) {
             perror("recvfrom");
             break;
         }
+
+        // DEBUG
+        printf("RECEIVED BLOCK\n");
 
         uint16_t opcode = (buffer[0] << 8) | buffer[1];
         uint16_t received_block_num = (buffer[2] << 8) | buffer[3];
@@ -161,6 +167,8 @@ void receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
         ack_msg[2] = (char)(block_num >> 8);
         ack_msg[3] = (char)(block_num & 0xFF);
         sendto(sockfd, ack_msg, 4, 0, (struct sockaddr *)addr, sizeof(*addr));
+        // DEBUG
+        printf("SENT ACK\n");
 
         if (len - 4 < BLOCK_SIZE) {
             break;
@@ -188,6 +196,9 @@ int main(int argc, char *argv[]) {
     sockfd = setup_socket(&args, &myaddr, &addr);
     if (sockfd == -1)
         exit(EXIT_FAILURE);
+    
+    // DEBUG
+    printf("SOCKET CREATED\n");
 
     switch (args.operation) {
     case FLAG_READ:
