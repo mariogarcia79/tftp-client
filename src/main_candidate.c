@@ -128,7 +128,7 @@ void receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
     free(msg);
 
     // DEBUG
-    printf("REQUEST SENT TEST\n");
+    printf("REQUEST SENT\n");
 
     while (1) {
         len = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)addr, &addr_len);
@@ -136,6 +136,8 @@ void receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
             perror("recvfrom");
             break;
         }
+
+        printf("%s", buffer);
 
         // DEBUG
         printf("RECEIVED BLOCK\n");
