@@ -140,7 +140,8 @@ char
 }
 
 int
-receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
+receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
+{
     char *msg;
     char ack_msg[4];
     char buffer[BLOCK_SIZE + 4]; // Maximum size of received packet
@@ -200,15 +201,6 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
         // Remove the first 4B of the packet, its the header.
         // Use bytes units of data, account for content size (packet - 4B).
         fwrite(buffer + 4, 1, msg_len - 4, file);
-
-
-        /*
-        char ack_msg[4] = {0};
-        ack_msg[0] = (char)(ACK >> 8);
-        ack_msg[1] = (char)(ACK & 0xFF);
-        ack_msg[2] = (char)(block_num >> 8);
-        ack_msg[3] = (char)(block_num & 0xFF);
-        */
     
         // Prepare ACK fields
         opcode = ACK;
@@ -233,12 +225,157 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
     return 0;
 }
 
-int main(int argc, char *argv[]) {
+int send_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
+    char *msg;
+    char buffer[BLOCK_SIZE + 4]; // Maximum size of the data packet
+    ssize_t msg_len;
+    socklen_t addr_len = sizeof(*addr);
+    uint16_t opcode;
+    uint16_t block_num = 1; // Block number to start from
+    uint16_t received_block_num;
+
+    // Open the file for reading
+    FILE *file = fopen(filename, "rb");
+    if (file == NULL) {
+        perror("fopen");
+        return -1;
+    }
+
+    // Send WRQ (Write Request) to the server
+    msg = serialize_req(WRQ, (char *)filename, TFTP_MESSAGE_MODE);
+    if (sendto(sockfd, msg, strlen(filename) + strlen(TFTP_MESSAGE_MODE) + 4, 0, 
+               (struct sockaddr *)addr, sizeof(*addr)) == -1) {
+        perror("sendto");
+        fclose(file);
+        return -1;
+    }
+    free(msg);
+    printf("Solicitud de escritura de \"%s\" enviada al servidor TFTP.\n", filename);
+
+    // Wait for the first ACK (block number 0) before starting to send data
+    while (1) {
+        msg_len = recvfrom(sockfd, buffer, sizeof(buffer), 0, 
+                           (struct sockaddr *)addr, &addr_len);
+        if (msg_len == -1) {
+            perror("recvfrom");
+            fclose(file);
+            return -1;
+        }
+
+        memcpy(&opcode, buffer + 0, 2);  // Get opcode
+        memcpy(&received_block_num, buffer + 2, 2); // Get block number
+
+        // Convert to host byte order
+        opcode = ntohs(opcode);
+        received_block_num = ntohs(received_block_num);
+
+        // Ensure we received the correct ACK for block 0
+        if (opcode == ERROR) {
+            fprintf(stdout, "Error %2u: %s", received_block_num, buffer + 4);
+            fclose(file);
+            return -1;
+        }
+
+        if (opcode != ACK) {
+            fprintf(stderr, "Código de operación recibido incorrecto: %d\n", opcode);
+            fclose(file);
+            return -1;
+        }
+
+        if (received_block_num == 0) {
+            break; // Received ACK for block 0, ready to send data
+        }
+    }
+
+    // Send data blocks
+    while (1) {
+        // Read the next block of data from the file
+        size_t bytes_read = fread(buffer + 4, 1, BLOCK_SIZE, file); // Skip the first 4 bytes for header
+        if (bytes_read == 0) {
+            // If no bytes were read, that means we've finished sending the file
+            break;
+        }
+
+        // Prepare the DATA packet: opcode (2 bytes) + block number (2 bytes) + data (up to 512 bytes)
+        opcode = DATA;
+        opcode = htons(opcode); // Convert to network byte order
+        block_num = htons(block_num); // Convert to network byte order
+
+        // Copy opcode and block number into the buffer
+        memcpy(buffer + 0, &opcode, 2);
+        memcpy(buffer + 2, &block_num, 2);
+
+        // Send the DATA packet
+        if (sendto(sockfd, buffer, bytes_read + 4, 0, (struct sockaddr *)addr, sizeof(*addr)) == -1) {
+            perror("sendto");
+            fclose(file);
+            return -1;
+        }
+
+        printf("Enviado bloque %u de datos.\n", block_num);
+
+        // Wait for ACK for the current block
+        while (1) {
+            msg_len = recvfrom(sockfd, buffer, sizeof(buffer), 0, 
+                               (struct sockaddr *)addr, &addr_len);
+            if (msg_len == -1) {
+                perror("recvfrom");
+                fclose(file);
+                return -1;
+            }
+
+            memcpy(&opcode, buffer + 0, 2);  // Get opcode
+            memcpy(&received_block_num, buffer + 2, 2); // Get block number
+
+            // Convert to host byte order
+            opcode = ntohs(opcode);
+            received_block_num = ntohs(received_block_num);
+
+            if (opcode == ERROR) {
+                fprintf(stdout, "Error %2u: %s", received_block_num, buffer + 4);
+                fclose(file);
+                return -1;
+            }
+
+            if (opcode != ACK) {
+                fprintf(stderr, "Código de operación recibido incorrecto: %d\n", opcode);
+                fclose(file);
+                return -1;
+            }
+
+            if (received_block_num == block_num) {
+                break; // Received ACK for the current block, proceed to the next one
+            } else {
+                fprintf(stderr, "Número de bloque recibido incorrecto. Esperaba %u, pero recibí %u.\n",
+                        block_num, received_block_num);
+                continue;
+            }
+        }
+
+        // If the block was smaller than 512 bytes, it means it's the last block
+        if (bytes_read < BLOCK_SIZE) {
+            break;
+        }
+
+        block_num++; // Increment the block number for the next data packet
+    }
+
+    // Finalize and close the file and socket
+    fclose(file);
+    close(sockfd);
+    printf("El archivo se ha enviado correctamente.\n");
+
+    return 0;
+}
+
+int
+main(int argc, char *argv[])
+{
     int err;
     int sockfd;
-    struct arguments args = {0};
+    struct arguments args     = {0};
     struct sockaddr_in myaddr = {0};
-    struct sockaddr_in addr = {0};
+    struct sockaddr_in addr   = {0};
 
     err = parse_args(argc, argv, &args);
     if (err == -1) {
@@ -253,6 +390,12 @@ int main(int argc, char *argv[]) {
     switch (args.operation) {
     case FLAG_READ:
         err = receive_file(sockfd, &addr, args.filename);
+        if (err == -1)
+            exit(EXIT_FAILURE);
+        break;
+
+    case FLAG_WRITE:
+        err = send_file(sockfd, &addr, args.filename);
         if (err == -1)
             exit(EXIT_FAILURE);
         break;
