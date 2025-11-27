@@ -154,6 +154,7 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
     FILE *file = fopen(filename, "w");
     if (file == NULL) {
         perror("fopen");
+        close(sockfd);
         return -1;
     }
 
@@ -161,6 +162,9 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
     if (sendto(sockfd, msg, strlen(filename) + strlen(TFTP_MESSAGE_MODE) + 4, 0, 
             (struct sockaddr *)addr, sizeof(*addr)) == -1) {
         perror("sendto");
+        close(sockfd);
+        fclose(file);
+        free(msg);
         return -1;
     }
     free(msg);
@@ -185,7 +189,8 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
 
         if (opcode == ERROR) {
             // Reuse block number variable, actually reading errcode
-            fprintf(stdout, "Error %2u: %s", received_block_num, buffer + 4);
+            fprintf(stdout, "Error %2u: %s\n", received_block_num, buffer + 4);
+            break;
         } 
         
         if (opcode != DATA) {
@@ -195,7 +200,7 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
 
         if (received_block_num != block_num) {
             fprintf(stderr, "El numero de bloque no coincide: %d\n", received_block_num);
-            continue;
+            break;
         }
 
         // Remove the first 4B of the packet, its the header.
@@ -210,7 +215,10 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         memcpy(ack_msg + 0, &opcode,             2); // Set opcode
         memcpy(ack_msg + 2, &received_block_num, 2); // Set block number
         
-        sendto(sockfd, ack_msg, 4, 0, (struct sockaddr *)addr, sizeof(*addr));
+        if (sendto(sockfd, ack_msg, 4, 0, (struct sockaddr *)addr, sizeof(*addr)) == -1) {
+            perror("sendto");
+            break;
+        }
         printf("Enviado ACK del bloque %u.\n", block_num);
 
         if (msg_len - 4 < BLOCK_SIZE) break;
@@ -225,7 +233,9 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
     return 0;
 }
 
-int send_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
+int
+send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
+{
     char *msg;
     char buffer[BLOCK_SIZE + 4]; // Maximum size of the data packet
     ssize_t msg_len;
@@ -234,10 +244,10 @@ int send_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
     uint16_t block_num = 1; // Block number to start from
     uint16_t received_block_num;
 
-    // Open the file for reading
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
         perror("fopen");
+        close(sockfd);
         return -1;
     }
 
@@ -246,13 +256,15 @@ int send_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
     if (sendto(sockfd, msg, strlen(filename) + strlen(TFTP_MESSAGE_MODE) + 4, 0, 
                (struct sockaddr *)addr, sizeof(*addr)) == -1) {
         perror("sendto");
+        close(sockfd);
         fclose(file);
+        free(msg);
         return -1;
     }
     free(msg);
     printf("Solicitud de escritura de \"%s\" enviada al servidor TFTP.\n", filename);
 
-    // Wait for the first ACK (block number 0) before starting to send data
+    // Wait for the first ACK
     while (1) {
         msg_len = recvfrom(sockfd, buffer, sizeof(buffer), 0, 
                            (struct sockaddr *)addr, &addr_len);
@@ -262,7 +274,7 @@ int send_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
             return -1;
         }
 
-        memcpy(&opcode, buffer + 0, 2);  // Get opcode
+        memcpy(&opcode,             buffer + 0, 2);  // Get opcode
         memcpy(&received_block_num, buffer + 2, 2); // Get block number
 
         // Convert to host byte order
@@ -271,7 +283,7 @@ int send_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
 
         // Ensure we received the correct ACK for block 0
         if (opcode == ERROR) {
-            fprintf(stdout, "Error %2u: %s", received_block_num, buffer + 4);
+            fprintf(stdout, "Error %2u: %s\n", received_block_num, buffer + 4);
             fclose(file);
             return -1;
         }
@@ -289,14 +301,13 @@ int send_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
 
     // Send data blocks
     while (1) {
-        // Read the next block of data from the file
-        size_t bytes_read = fread(buffer + 4, 1, BLOCK_SIZE, file); // Skip the first 4 bytes for header
+        // Read the next block of data
+        size_t bytes_read = fread(buffer + 4, 1, BLOCK_SIZE, file);
         if (bytes_read == 0) {
-            // If no bytes were read, that means we've finished sending the file
             break;
         }
 
-        // Prepare the DATA packet: opcode (2 bytes) + block number (2 bytes) + data (up to 512 bytes)
+        // Prepare the DATA packet
         opcode = DATA;
         opcode = htons(opcode); // Convert to network byte order
         block_num = htons(block_num); // Convert to network byte order
@@ -304,6 +315,9 @@ int send_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
         // Copy opcode and block number into the buffer
         memcpy(buffer + 0, &opcode, 2);
         memcpy(buffer + 2, &block_num, 2);
+
+        // reset block_num byte order for comparisons.
+        block_num = ntohs(block_num);
 
         // Send the DATA packet
         if (sendto(sockfd, buffer, bytes_read + 4, 0, (struct sockaddr *)addr, sizeof(*addr)) == -1) {
@@ -332,7 +346,7 @@ int send_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
             received_block_num = ntohs(received_block_num);
 
             if (opcode == ERROR) {
-                fprintf(stdout, "Error %2u: %s", received_block_num, buffer + 4);
+                fprintf(stdout, "Error %2u: %s\n", received_block_num, buffer + 4);
                 fclose(file);
                 return -1;
             }
