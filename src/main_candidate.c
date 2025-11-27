@@ -210,9 +210,13 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
         ack_msg[3] = (char)(block_num & 0xFF);
         */
     
+        // Prepare ACK fields
         opcode = ACK;
-        memcpy(ack_msg + 0, &opcode,     2); // Set opcode
-        memcpy(ack_msg + 2, &block_num,  2); // Set block number
+        opcode = htons(opcode);
+        received_block_num = htons(received_block_num);
+
+        memcpy(ack_msg + 0, &opcode,             2); // Set opcode
+        memcpy(ack_msg + 2, &received_block_num, 2); // Set block number
         
         sendto(sockfd, ack_msg, 4, 0, (struct sockaddr *)addr, sizeof(*addr));
         printf("Enviado ACK del bloque %u.\n", block_num);
