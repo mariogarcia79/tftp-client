@@ -137,10 +137,9 @@ void receive_file(int sockfd, struct sockaddr_in *addr, const char *filename) {
             break;
         }
 
-        printf("%s", buffer);
-
         // DEBUG
         printf("RECEIVED BLOCK\n");
+        printf("%s", buffer);
 
         uint16_t opcode = (buffer[0] << 8) | buffer[1];
         uint16_t received_block_num = (buffer[2] << 8) | buffer[3];
