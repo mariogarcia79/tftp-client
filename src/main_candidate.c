@@ -189,7 +189,7 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
 
         if (opcode == ERROR) {
             // Reuse block number variable, actually reading errcode
-            fprintf(stdout, "Error %2u: %s\n", received_block_num, buffer + 4);
+            fprintf(stdout, "Error %02u: %s\n", received_block_num, buffer + 4);
             break;
         } 
         
@@ -283,7 +283,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
 
         // Ensure we received the correct ACK for block 0
         if (opcode == ERROR) {
-            fprintf(stdout, "Error %2u: %s\n", received_block_num, buffer + 4);
+            fprintf(stdout, "Error %02u: %s\n", received_block_num, buffer + 4);
             fclose(file);
             return -1;
         }
@@ -346,7 +346,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
             received_block_num = ntohs(received_block_num);
 
             if (opcode == ERROR) {
-                fprintf(stdout, "Error %2u: %s\n", received_block_num, buffer + 4);
+                fprintf(stdout, "Error %02u: %s\n", received_block_num, buffer + 4);
                 fclose(file);
                 return -1;
             }
