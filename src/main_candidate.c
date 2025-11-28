@@ -238,6 +238,7 @@ receive_file(int sockfd, struct sockaddr_in *addr, const char *filename)
 int
 send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
 {
+    int last_ack = 0;
     char *msg;
     char buffer[BLOCK_SIZE + 4]; // Maximum size of the data packet
     ssize_t msg_len;
@@ -296,6 +297,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         }
 
         fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)\n", received_block_num);
+        if (last_ack) break;
         
         if (received_block_num == 0) {
             received_block_num = 1;
@@ -332,7 +334,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         if (bytes_read < BLOCK_SIZE) {
             fprintf(stdout, "El bloque %u es el ultimo.\n", block_num);
             printf("Cierre del fichero y del socket udp.\n");
-            break;
+            last_ack = 1;
         }
 
         block_num++;
