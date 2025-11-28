@@ -296,6 +296,11 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         }
 
         fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)\n", received_block_num);
+        
+        if (received_block_num == 0) {
+            received_block_num = 1;
+            block_num = 1;
+        }
 
         // Read the next block of data
         size_t bytes_read = fread(buffer + 4, 1, BLOCK_SIZE, file);
