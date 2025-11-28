@@ -297,6 +297,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         }
 
         fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)\n", received_block_num);
+        
         if (last_ack) {
             fprintf(stdout, "El bloque %u es el ultimo.\n", block_num);
             printf("Cierre del fichero y del socket udp.\n");
