@@ -243,7 +243,7 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
     ssize_t msg_len;
     socklen_t addr_len = sizeof(*addr);
     uint16_t opcode;
-    uint16_t block_num = 0; // Block number to start from
+    uint16_t block_num = 1; // Block number to start from
     uint16_t received_block_num;
 
     FILE *file = fopen(filename, "rb");
@@ -266,23 +266,24 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
     free(msg);
     printf("Solicitud de escritura de \"%s\" enviada al servidor tftp.\n", filename);
 
-    // Send data blocks
+    // Wait for the first ACK
     while (1) {
         msg_len = recvfrom(sockfd, buffer, sizeof(buffer), 0, 
-                (struct sockaddr *)addr, &addr_len);
+                           (struct sockaddr *)addr, &addr_len);
         if (msg_len == -1) {
             perror("recvfrom");
             fclose(file);
             return -1;
         }
 
-        memcpy(&opcode, buffer + 0, 2);  // Get opcode
+        memcpy(&opcode,             buffer + 0, 2);  // Get opcode
         memcpy(&received_block_num, buffer + 2, 2); // Get block number
 
         // Convert to host byte order
         opcode = ntohs(opcode);
         received_block_num = ntohs(received_block_num);
 
+        // Ensure the received the correct ACK for block 0
         if (opcode == ERROR) {
             fprintf(stdout, "Error %02u: %s\n", received_block_num, buffer + 4);
             fclose(file);
@@ -290,13 +291,20 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         }
 
         if (opcode != ACK) {
-            fprintf(stderr, "Codigo de operación recibido incorrecto: %d\n", opcode);
+            fprintf(stderr, "Codigo de operacion recibido incorrecto: %d\n", opcode);
             fclose(file);
             return -1;
         }
 
         fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)\n", received_block_num);
 
+        if (received_block_num == 0) {
+            break;
+        }
+    }
+
+    // Send data blocks
+    while (1) {
         // Read the next block of data
         size_t bytes_read = fread(buffer + 4, 1, BLOCK_SIZE, file);
         if (bytes_read == 0) {
@@ -323,6 +331,45 @@ send_file(int sockfd, struct sockaddr_in *addr, const char *filename)
         }
 
         printf("Enviado bloque %u del fichero.\n", block_num);
+
+        // Wait for ACK for the current block
+        while (1) {
+            msg_len = recvfrom(sockfd, buffer, sizeof(buffer), 0, 
+                               (struct sockaddr *)addr, &addr_len);
+            if (msg_len == -1) {
+                perror("recvfrom");
+                fclose(file);
+                return -1;
+            }
+
+            memcpy(&opcode, buffer + 0, 2);  // Get opcode
+            memcpy(&received_block_num, buffer + 2, 2); // Get block number
+
+            // Convert to host byte order
+            opcode = ntohs(opcode);
+            received_block_num = ntohs(received_block_num);
+
+            if (opcode == ERROR) {
+                fprintf(stdout, "Error %02u: %s\n", received_block_num, buffer + 4);
+                fclose(file);
+                return -1;
+            }
+
+            if (opcode != ACK) {
+                fprintf(stderr, "Codigo de operación recibido incorrecto: %d\n", opcode);
+                fclose(file);
+                return -1;
+            }
+
+            fprintf(stdout, "Recibido ACK del servidor (numero de bloque %u)\n", received_block_num);
+
+            if (received_block_num == block_num) {
+                break; // Received ACK for the current block, proceed to the next one
+            } else {
+                fprintf(stderr, "Numero de bloque recibido incorrecto.\n");
+                continue;
+            }
+        }
 
         if (bytes_read < BLOCK_SIZE) {
             fprintf(stdout, "El bloque %u es el ultimo.\n", block_num);
